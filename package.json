@@ -1,0 +1,18 @@
+{
+  "name": "urlsfrom",
+  "version": "0.0.1",
+  "description": "Get the urls from a stream, with optional validation.",
+  "main": "urlsfrom.js",
+  "repository": "http://github.com/jacobrask/node-urlsfrom.git",
+  "keywords": [ "url", "stream" ],
+  "author": {
+    "name": "Jacob Rask",
+    "email": "jacob@jacobrask.net"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "htmlparser2": "~3.3.0",
+    "async": "~0.2.9",
+    "request": "~2.27.0"
+  }
+}
