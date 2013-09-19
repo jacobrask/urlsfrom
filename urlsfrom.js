@@ -1,5 +1,4 @@
 var async = require('async');
-var http = require('http');
 var request = require('request');
 var Transform = require('stream').Transform;
 var htmlparser = require("htmlparser2");
@@ -19,57 +18,77 @@ var getUrl = function (str) {
   return match;
 };
 
-exports = module.exports = function (opts) {
-  opts || (opts = {});
+var urlsFrom = function (str, opts, save, done) {
   var objectMode = !!opts.objectMode || !!opts.title;
-  var urlStream = new Transform({ objectMode: objectMode });
-  urlStream._transform = function (data, enc, done) {
-    if (!objectMode) data = data.toString();
-    var urls = data.split(' ').reduce(function (urls, str) {
-      var url = getUrl(str);
-      if (url) urls.push(url);
-      return urls;
-    }, []);
 
-    if (opts.validate || opts.title) {
-      async.forEach(urls, function (url, next) {
-        var urlObj = objectMode ? { href: url } : url;
-        var req;
-        if (!opts.title) {
-          req = request.head(url);
-        } else {
-          req = request.get(url);
-          urlObj.title = '';
-          var inTitle = false;
-          // Parse but exit after title was found
-          var parser = new htmlparser.WritableStream({
-            onopentag: function (name) { if (name === 'title') inTitle = true; },
-            ontext: function (text) { if (inTitle) urlObj.title += text; },
-            onclosetag: function (name) {
-              if (name === 'title') {
-                inTitle = false;
-                req.response.destroy();
-              }
+  var urls = str.split(' ').reduce(function (urls, str) {
+    var url = getUrl(str);
+    if (url) urls.push(url);
+    return urls;
+  }, []);
+
+  if (opts.validate || opts.title) {
+    async.forEach(urls, function (url, next) {
+      var urlObj = objectMode ? { href: url } : url;
+      var req;
+      if (!opts.title) {
+        req = request.head(url);
+      } else {
+        req = request.get(url);
+        urlObj.title = '';
+        var inTitle = false;
+        // Parse but exit after title was found
+        var parser = new htmlparser.WritableStream({
+          onopentag: function (name) { if (name === 'title') inTitle = true; },
+          ontext: function (text) { if (inTitle) urlObj.title += text; },
+          onclosetag: function (name) {
+            if (name === 'title') {
+              inTitle = false;
+              req.response.destroy();
             }
-          });
-          req.pipe(parser);
-        }
-        // If any error occurred, assume it wasn't a valid URL
-        req.on('error', function () { next(); });
-        req.on('end', function () {
-          if (req.response.statusCode == 200) urlStream.push(urlObj);
-          next();
+          }
         });
-      }, function (err) {
-        done();
+        req.pipe(parser);
+      }
+      // If any error occurred, assume it wasn't a valid URL
+      req.on('error', function () { next(); });
+      req.on('end', function () {
+        if (req.response.statusCode == 200) save.push(urlObj);
+        next();
       });
-    } else {
-      urls.forEach(function (url) {
-        if (objectMode) urlStream.push({ href: url });
-        else urlStream.push(url);
-      });
-      done();
-    }
+    },
+    function () { done(); }
+    );
+  } else {
+    urls.forEach(function (url) {
+      if (objectMode) save.push({ href: url });
+      else save.push(url);
+    });
+    done();
+  }
+};
+
+var asyncParser = function (str, opts, cb) {
+  if (typeof opts === 'function') {
+    cb = opts;
+    opts = null;
+  }
+  opts || (opts = {});
+  var urls = [];
+  urlsFrom(str, opts, urls, function () { cb(null, urls); });
+};
+
+var urlStream = function (opts) {
+  opts || (opts = {});
+  opts.objectMode = opts.objectMode != null ? opts.objectMode : !!opts.title;
+  var urlStream = new Transform({ objectMode: opts.objectMode });
+  urlStream._transform = function (data, enc, done) {
+    if (!opts.objectMode) data = data.toString();
+    urlsFrom(data, opts, urlStream, done);
   };
   return urlStream;
 };
+
+asyncParser.stream = urlStream;
+
+exports = module.exports = asyncParser;
