@@ -9,6 +9,9 @@
     "name": "Jacob Rask",
     "email": "jacob@jacobrask.net"
   },
+  "scripts" : {
+    "test" : "./node_modules/.bin/tap test/*.js"
+  },
   "license": "MIT",
   "dependencies": {
     "htmlparser2": "~3.3.0",
