@@ -4,9 +4,7 @@ var request = require('request');
 var Transform = require('stream').Transform;
 var htmlparser = require("htmlparser2");
 
-// Pretty lazy matching. If we match something that's not an URL, we notice
-// when we try to GET it anyway.
-var URL_RE = new RegExp('(https?:\\/\\/)?'+ // protocol
+var URL_RE = new RegExp('((https?:\\/\\/)|(www.?\\.))'+ // protocol or www
   '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|'+ // domain name
   '((\\d{1,3}\\.){3}\\d{1,3}))'+ // OR ip (v4) address
   '(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ // port and path
@@ -23,8 +21,10 @@ var getUrl = function (str) {
 
 exports = module.exports = function (opts) {
   opts || (opts = {});
-  var urlStream = new Transform({ objectMode: true });
-  urlStream._transform = function (data, _, done) {
+  var objectMode = !!opts.objectMode || !!opts.title;
+  var urlStream = new Transform({ objectMode: objectMode });
+  urlStream._transform = function (data, enc, done) {
+    if (!objectMode) data = data.toString();
     var urls = data.split(' ').reduce(function (urls, str) {
       var url = getUrl(str);
       if (url) urls.push(url);
@@ -33,7 +33,7 @@ exports = module.exports = function (opts) {
 
     if (opts.validate || opts.title) {
       async.forEach(urls, function (url, next) {
-        var urlObj = { href: url };
+        var urlObj = objectMode ? { href: url } : url;
         var req;
         if (!opts.title) {
           req = request.head(url);
@@ -57,10 +57,7 @@ exports = module.exports = function (opts) {
         // If any error occurred, assume it wasn't a valid URL
         req.on('error', function () { next(); });
         req.on('end', function () {
-          if (req.response.statusCode == 200) {
-            urlObj.ContentType = req.response.headers['content-type'].split(';')[0];
-            urlStream.push(urlObj);
-          }
+          if (req.response.statusCode == 200) urlStream.push(urlObj);
           next();
         });
       }, function (err) {
@@ -68,7 +65,8 @@ exports = module.exports = function (opts) {
       });
     } else {
       urls.forEach(function (url) {
-        urlStream.push({ href: url });
+        if (objectMode) urlStream.push({ href: url });
+        else urlStream.push(url);
       });
       done();
     }
